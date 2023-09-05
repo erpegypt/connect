@@ -58,7 +58,7 @@ def get_total_stock(filters):
 			price_list = filters.get("price_list")
 			conditions += f' AND latest_price.price_list = "{price_list}"'
 
-		conditions += " GROUP BY warehouse.company, item.item_code"
+		conditions += " GROUP BY warehouse.company,item.item_code"
 		columns += " warehouse.company, '' as warehouse"
 
 
@@ -68,7 +68,7 @@ def get_total_stock(filters):
 			{0},
 			item.item_code,
 			item.description,
-			ledger.actual_qty as actual_qty,
+			sum(ledger.actual_qty) as actual_qty,
 			COALESCE(latest_price.price_list_rate, 0) as price_list_rate,
 			(ledger.actual_qty * COALESCE(latest_price.price_list_rate, 0)) as total,
 			latest_price.price_list
