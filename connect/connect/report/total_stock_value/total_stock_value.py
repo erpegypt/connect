@@ -69,14 +69,14 @@ def get_total_stock(filters):
 			item.item_code,
 			item.description,
 			ledger.actual_qty as actual_qty,
-			latest_price.price_list_rate as price_list_rate,
-			(ledger.actual_qty * latest_price.price_list_rate) as total,
+			COALESCE(latest_price.price_list_rate, 0) as price_list_rate,
+			(ledger.actual_qty * COALESCE(latest_price.price_list_rate, 0)) as total,
 			latest_price.price_list
 		FROM
 			`tabBin` AS ledger
 		INNER JOIN `tabItem` AS item
 			ON ledger.item_code = item.item_code
-		INNER JOIN (
+		LEFT JOIN (
 			SELECT
 				item_code,
 				MAX(valid_from) AS latest_valid_from
@@ -85,7 +85,7 @@ def get_total_stock(filters):
 			GROUP BY item_code
 		) AS latest_valid
 			ON item.item_code = latest_valid.item_code
-		INNER JOIN `tabItem Price` AS latest_price
+		LEFT JOIN `tabItem Price` AS latest_price
 			ON latest_valid.item_code = latest_price.item_code
 			AND latest_valid.latest_valid_from = latest_price.valid_from
 		INNER JOIN `tabWarehouse` AS warehouse
@@ -94,4 +94,5 @@ def get_total_stock(filters):
 			ledger.actual_qty != 0 {1}
 		""".format(columns, conditions)
 	)
+
 	return data
