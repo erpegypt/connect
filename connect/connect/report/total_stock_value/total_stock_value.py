@@ -86,8 +86,10 @@ def get_columns(filters):
 					"Price List", f'{filters.get("price_list")}', "currency"
 				)
 		if currency != 'EGP':
-			columns.append({"label": _("Factor Exchange Rate"), "fieldname": "factor", "width": 90, "fieldtype": "Float"})
-			columns.append({"label": _("Total After"), "fieldname": "total_after_rate", "width": 90, "fieldtype": "Float"})
+			# columns.append({"label": _("Factor Exchange Rate"), "fieldname": "factor", "width": 90, "fieldtype": "Float"})
+			columns.append({"label": _("Unit Price"), "fieldname": "unit_price", "width": 90, "fieldtype": "Float"})
+			columns.append({"label": _("Total After Factor"), "fieldname": "total_after_rate", "width": 90, "fieldtype": "Float"})
+
 
 	return columns
 
@@ -116,7 +118,7 @@ def get_total_stock(filters):
 			price_list = filters.get("price_list")
 			conditions += f' AND latest_price.price_list = "{price_list}"'
 
-		conditions += " GROUP BY ledger.warehouse,item.item_code"
+		conditions += " GROUP BY warehouse.company,item.item_code"
 		columns += " warehouse.company, '' as warehouse"
 
 	data = frappe.db.sql(
@@ -130,7 +132,7 @@ def get_total_stock(filters):
 			item.last_purchase_rate,
 			item.max_discount,
 			COALESCE(latest_price.price_list_rate, 0) as price_list_rate,
-			(actual_qty  * COALESCE(latest_price.price_list_rate, 0)) as total,
+			(sum(ledger.actual_qty)   * COALESCE(latest_price.price_list_rate, 0)) as total,
 			latest_price.price_list ,
 			latest_price.currency ,
 			(
@@ -146,7 +148,16 @@ def get_total_stock(filters):
 				WHERE c.from_currency = latest_price.currency 
 				ORDER BY c.creation DESC 
 				LIMIT 1
-			)  * (actual_qty  * COALESCE(latest_price.price_list_rate, 0)) ) as total_after_rate
+			)  * COALESCE(latest_price.price_list_rate, 0) ) as unit_price ,
+			(
+			(
+				SELECT c.exchange_rate
+				FROM `tabCurrency Exchange` c 
+				WHERE c.from_currency = latest_price.currency 
+				ORDER BY c.creation DESC 
+				LIMIT 1
+			)  * COALESCE(latest_price.price_list_rate, 0) * sum(ledger.actual_qty)
+			) as total_after_rate
 		FROM
 			`tabBin` AS ledger
 		INNER JOIN `tabItem` AS item
