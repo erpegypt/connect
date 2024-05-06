@@ -8,19 +8,54 @@ from frappe import _
 def execute(filters=None):
 	if not filters:
 		filters = {}
-	columns = get_columns()
+	columns = get_columns(filters)
 	stock = get_total_stock(filters)
 
 	return columns, stock
 
 
-def get_columns():
+def get_columns(filters):
+
 	columns = [
-		_("Company") + ":Link/Company:200",
-		_("Warehouse") + ":Link/Warehouse:150",
-		_("Item") + ":Link/Item:100",
-		_("Description") + "::240",
-		_("Current Qty") + ":Float:80",
+		{
+			"fieldname": "company",
+			"label": _("Company"),
+			"fieldtype": "Link",
+			"options" : "Company",
+			"width": "120"
+		},
+		{
+			"fieldname": "warehouse",
+			"label": _("Warehouse"),
+			"fieldtype": "Link",
+			"options" : "Warehouse",
+			"width": "120"
+		},
+		{
+			"fieldname": "item_code",
+			"label": _("Item Code"),
+			"fieldtype": "Link",
+			"options" : "Item",
+			"width": "90"
+		},
+		{
+			"fieldname": "description",
+			"label": _("Description"),
+			"fieldtype": "Data",
+			"width": "120"
+		},
+		{
+			"fieldname": "actual_qty",
+			"label": _("Current Qty"),
+			"fieldtype": "Float",
+			"width": "100"
+		},
+		{
+			"fieldname": "valuation_rate",
+			"label": _("Valuation Rate"),
+			"fieldtype": "Currency",
+			"width": "90"
+		},
 		{
 			"fieldname": "last_purchase_rate",
 			"label": _("Last Purchase Rate"),
@@ -46,12 +81,23 @@ def get_columns():
 			"width": "90"
 		},
 	] 
+	if filters.get("price_list"):
+		currency = frappe.db.get_value(
+					"Price List", f'{filters.get("price_list")}', "currency"
+				)
+		if currency != 'EGP':
+			columns.append({"label": _("Factor Exchange Rate"), "fieldname": "factor", "width": 90, "fieldtype": "Float"})
+			columns.append({"label": _("Total After"), "fieldname": "total_after_rate", "width": 90, "fieldtype": "Float"})
+
 	return columns
 
 
 def get_total_stock(filters):
 	conditions = ""
 	columns = ""
+
+	if filters.get("item") :
+		conditions += f'AND item.item_code = "{filters.get("item")}" '
 
 	if filters.get("group_by") == "Warehouse":
 		if filters.get("company"):
@@ -70,22 +116,37 @@ def get_total_stock(filters):
 			price_list = filters.get("price_list")
 			conditions += f' AND latest_price.price_list = "{price_list}"'
 
-		conditions += " GROUP BY warehouse.company,item.item_code"
+		conditions += " GROUP BY ledger.warehouse,item.item_code"
 		columns += " warehouse.company, '' as warehouse"
-
 
 	data = frappe.db.sql(
 		"""
 		SELECT
 			{0},
 			item.item_code,
+			item.valuation_rate ,
 			item.description,
 			sum(ledger.actual_qty) as actual_qty,
 			item.last_purchase_rate,
 			item.max_discount,
 			COALESCE(latest_price.price_list_rate, 0) as price_list_rate,
-			(ledger.actual_qty * COALESCE(latest_price.price_list_rate, 0)) as total,
-			latest_price.price_list
+			(actual_qty  * COALESCE(latest_price.price_list_rate, 0)) as total,
+			latest_price.price_list ,
+			latest_price.currency ,
+			(
+				SELECT c.exchange_rate
+				FROM `tabCurrency Exchange` c 
+				WHERE c.from_currency = latest_price.currency 
+				ORDER BY c.creation DESC 
+				LIMIT 1
+			) AS factor ,
+			( (
+				SELECT c.exchange_rate
+				FROM `tabCurrency Exchange` c 
+				WHERE c.from_currency = latest_price.currency 
+				ORDER BY c.creation DESC 
+				LIMIT 1
+			)  * (actual_qty  * COALESCE(latest_price.price_list_rate, 0)) ) as total_after_rate
 		FROM
 			`tabBin` AS ledger
 		INNER JOIN `tabItem` AS item
@@ -106,6 +167,8 @@ def get_total_stock(filters):
 			ON warehouse.name = ledger.warehouse
 		WHERE
 			ledger.actual_qty != 0 {1}
-		""".format(columns, conditions)
+			
+
+		""".format(columns, conditions), as_dict = 1
 	)
 	return data

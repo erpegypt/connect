@@ -29,6 +29,13 @@ frappe.query_reports["Total Stock Value"] = {
 			"fieldtype": "Link",
 			"width": "80",
 			"options": "Price List",
+		},
+		{
+			"fieldname": "item",
+			"label": __("Item"),
+			"fieldtype": "Link",
+			"width": "80",
+			"options": "Item",
 		}
 	]
 };
