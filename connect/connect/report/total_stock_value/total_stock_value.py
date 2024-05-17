@@ -126,7 +126,15 @@ def get_total_stock(filters):
 		SELECT
 			{0},
 			item.item_code,
-			item.valuation_rate ,
+			(
+				SELECT b.valuation_rate
+				FROM `tabBin` b 
+				WHERE 
+					b.item_code = item.item_code
+					and
+					b.warehouse = warehouse.name
+			)
+			as valuation_rate ,
 			item.description,
 			sum(ledger.actual_qty) as actual_qty,
 			item.last_purchase_rate,
